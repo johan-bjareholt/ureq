@@ -3,7 +3,9 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
-use crate::{header::HeaderLine, response::ResponseStatusIndex, Request, Response};
+use crate::{
+    header::HeaderLine, response::PendingReader, response::ResponseStatusIndex, Request, Response,
+};
 
 /// Converts an [`http::Response`] into a [`Response`].
 ///
@@ -44,7 +46,7 @@ impl<T: AsRef<[u8]> + Send + Sync + 'static> From<http::Response<T>> for Respons
                     HeaderLine::from(raw_header).into_header().unwrap()
                 })
                 .collect::<Vec<_>>(),
-            reader: Box::new(Cursor::new(value.into_body())),
+            reader: PendingReader::Reader(Box::new(Cursor::new(value.into_body()))),
             remote_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 80),
             local_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
             history: vec![],
@@ -362,7 +364,8 @@ mod tests {
         use std::io::{Cursor, Read};
 
         let mut response = super::Response::new(200, "OK", "tbr").unwrap();
-        response.reader = Box::new(Cursor::new(vec![0xde, 0xad, 0xbe, 0xef]));
+        response.reader =
+            super::PendingReader::Reader(Box::new(Cursor::new(vec![0xde, 0xad, 0xbe, 0xef])));
         let http_response: Response<Box<dyn Read + Send + Sync + 'static>> = response.into();
 
         let mut buf = vec![];
