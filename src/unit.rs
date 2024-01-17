@@ -295,7 +295,7 @@ fn connect_inner(
     }
 
     // send the body (which can be empty now depending on redirects)
-    body::send_body(body, unit.is_chunked, stream.inner_mut())?;
+    body::send_body(body, unit.is_chunked, &mut stream)?;
 
     // start reading the response to process cookies and redirects.
     let result = Response::do_from_stream(stream, unit);

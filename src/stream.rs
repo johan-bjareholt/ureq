@@ -86,14 +86,13 @@ impl BufRead for DeadlineStream {
             let timeout = time_until_deadline(deadline)?;
             if let Some(socket) = self.stream.socket() {
                 socket.set_read_timeout(Some(timeout))?;
-                socket.set_write_timeout(Some(timeout))?;
             }
         }
         self.stream.fill_buf().map_err(|e| {
-            // On unix-y platforms set_read_timeout and set_write_timeout
-            // causes ErrorKind::WouldBlock instead of ErrorKind::TimedOut.
-            // Since the socket most definitely not set_nonblocking(true),
-            // we can safely normalize WouldBlock to TimedOut
+            // On unix-y platforms set_read_timeout causes ErrorKind::WouldBlock
+            // instead of ErrorKind::TimedOut. Since the socket most definitely
+            // not set_nonblocking(true), we can safely normalize WouldBlock
+            // to TimedOut
             if e.kind() == io::ErrorKind::WouldBlock {
                 return io_err_timeout("timed out reading response".to_string());
             }
@@ -128,6 +127,45 @@ impl Read for DeadlineStream {
         };
         self.consume(nread);
         Ok(nread)
+    }
+}
+
+impl Write for DeadlineStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if let Some(deadline) = self.deadline {
+            let timeout = time_until_deadline(deadline)?;
+            if let Some(socket) = self.stream.socket() {
+                socket.set_write_timeout(Some(timeout))?;
+            }
+        }
+        self.stream.write(buf).map_err(|e| {
+            // On unix-y platforms set_write_timeout causes ErrorKind::WouldBlock
+            // instead of ErrorKind::TimedOut. Since the socket most definitely
+            // not set_nonblocking(true), we can safely normalize WouldBlock
+            // to TimedOut
+            if e.kind() == io::ErrorKind::WouldBlock {
+                return io_err_timeout("timed out writing to stream".to_string());
+            }
+            e
+        })
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(deadline) = self.deadline {
+            let timeout = time_until_deadline(deadline)?;
+            if let Some(socket) = self.stream.socket() {
+                socket.set_write_timeout(Some(timeout))?;
+            }
+        }
+        self.stream.flush().map_err(|e| {
+            // On unix-y platforms set_write_timeout causes ErrorKind::WouldBlock
+            // instead of ErrorKind::TimedOut. Since the socket most definitely
+            // not set_nonblocking(true), we can safely normalize WouldBlock
+            // to TimedOut
+            if e.kind() == io::ErrorKind::WouldBlock {
+                return io_err_timeout("timed out flushing stream".to_string());
+            }
+            e
+        })
     }
 }
 
