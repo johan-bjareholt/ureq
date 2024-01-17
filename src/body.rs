@@ -1,4 +1,4 @@
-use crate::stream::Stream;
+use crate::stream::DeadlineStream;
 use std::fmt;
 use std::io::{self, copy, empty, Cursor, Read, Write};
 
@@ -141,7 +141,7 @@ fn copy_chunked<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> io::Result
 pub(crate) fn send_body(
     mut body: SizedReader,
     do_chunk: bool,
-    stream: &mut Stream,
+    stream: &mut DeadlineStream,
 ) -> io::Result<()> {
     if do_chunk {
         copy_chunked(&mut body.reader, stream)?;
