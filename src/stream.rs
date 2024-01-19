@@ -135,7 +135,7 @@ impl Write for DeadlineStream {
         if let Some(deadline) = self.deadline {
             let timeout = time_until_deadline(deadline)?;
             if let Some(socket) = self.stream.socket() {
-                socket.set_write_timeout(Some(timeout))?;
+                socket.set_write_timeout(Some(timeout / 2))?;
             }
         }
         self.stream.write(buf).map_err(|e| {
@@ -153,7 +153,7 @@ impl Write for DeadlineStream {
         if let Some(deadline) = self.deadline {
             let timeout = time_until_deadline(deadline)?;
             if let Some(socket) = self.stream.socket() {
-                socket.set_write_timeout(Some(timeout))?;
+                socket.set_write_timeout(Some(timeout / 2))?;
             }
         }
         self.stream.flush().map_err(|e| {
