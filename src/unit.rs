@@ -2,10 +2,12 @@ use std::fmt::{self, Display};
 use std::io::{self, Write};
 use std::ops::Range;
 use std::time;
+use std::os::unix::io::AsRawFd;
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use log::debug;
 use url::Url;
+use libc;
 
 #[cfg(feature = "cookies")]
 use cookie::Cookie;
@@ -254,6 +256,18 @@ fn connect_inner(
     let method = &unit.method;
     // open socket
     let (mut stream, is_recycled) = connect_socket(unit, host, use_pooled)?;
+
+    // limit tcp buffer size based on body size to be able to estimate bandwidth
+    let tcp_stream = stream.socket().unwrap();
+    let socket_fd = tcp_stream.as_raw_fd();
+    let content_size_opt = header::get_header(&unit.headers, "Content-Length");
+    if let Some(size_str) = content_size_opt {
+        let size = size_str.parse::<u64>().expect("Content-Length does not contain an unsigned integer");
+        unsafe {
+            let sock_buf_size = std::cmp::min(size/100, 1024) as libc::c_int;
+            let _res = libc::setsockopt(socket_fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &sock_buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&sock_buf_size) as libc::socklen_t);
+        }
+    }
 
     if is_recycled {
         debug!("sending request (reused connection) {} {}", method, url);
