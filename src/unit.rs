@@ -264,7 +264,8 @@ fn connect_inner(
     if let Some(size_str) = content_size_opt {
         let size = size_str.parse::<u64>().expect("Content-Length does not contain an unsigned integer");
         unsafe {
-            let sock_buf_size = std::cmp::min(size/100, 1024) as libc::c_int;
+            let tls_packet_size = 16384_u64;
+            let sock_buf_size = std::cmp::min(size/100, tls_packet_size) as libc::c_int;
             let _res = libc::setsockopt(socket_fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &sock_buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&sock_buf_size) as libc::socklen_t);
         }
     }
