@@ -1,6 +1,7 @@
 use std::fmt::{self, Display};
 use std::io::{self, Write};
 use std::ops::Range;
+use std::os::unix::io::AsRawFd;
 use std::time;
 
 use base64::{prelude::BASE64_STANDARD, Engine};
@@ -159,7 +160,7 @@ pub(crate) fn connect(
 ) -> Result<Response, Error> {
     let mut history = vec![];
     let mut resp = loop {
-        let resp = connect_inner(&unit, use_pooled, body, &history)?;
+        let resp = connect_inner(&mut unit, use_pooled, body, &history)?;
 
         // handle redirects
         if !(300..399).contains(&resp.status()) || unit.agent.config.redirects == 0 {
@@ -240,7 +241,7 @@ pub(crate) fn connect(
 
 /// Perform a connection. Does not follow redirects.
 fn connect_inner(
-    unit: &Unit,
+    unit: &mut Unit,
     use_pooled: bool,
     body: SizedReader,
     history: &[Url],
@@ -254,6 +255,31 @@ fn connect_inner(
     let method = &unit.method;
     // open socket
     let (mut stream, is_recycled) = connect_socket(unit, host, use_pooled)?;
+
+    // limit tcp buffer size based on send-buffer-size if set by application
+    if let Some(send_buffer_size_str) = header::get_header(&unit.headers, "Send-Buffer-Size") {
+        let send_buffer_size = send_buffer_size_str
+            .parse::<u64>()
+            .expect("Send-Buffer-Size was not an unsigned integer");
+
+        let tcp_stream = stream.socket().unwrap();
+        let socket_fd = tcp_stream.as_raw_fd();
+        unsafe {
+            let _res = libc::setsockopt(
+                socket_fd,
+                libc::SOL_SOCKET,
+                libc::SO_SNDBUF,
+                &send_buffer_size as *const _ as *const libc::c_void,
+                std::mem::size_of_val(&send_buffer_size) as libc::socklen_t,
+            );
+        }
+    }
+
+    unit.headers = unit
+        .headers
+        .drain(..)
+        .filter(|h| h.name() != "Send-Buffer-Size")
+        .collect();
 
     if is_recycled {
         debug!("sending request (reused connection) {} {}", method, url);
@@ -323,7 +349,7 @@ fn connect_inner(
                                 break;
                             }
                         }
-                        return connect_inner(&unit_without_expect, use_pooled, body, history);
+                        return connect_inner(&mut unit_without_expect, use_pooled, body, history);
                     }
                     _ => {
                         debug!("Didn't get 100-continue, reading body");
