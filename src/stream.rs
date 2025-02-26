@@ -491,7 +491,7 @@ pub(crate) fn connect_host(
                 "{}",
                 proxy.connect(hostname, port, &unit.agent.config.user_agent)
             )
-            .unwrap();
+            .map_err(|err| ErrorKind::ConnectionFailed.msg("Connect error").src(err))?;
             stream.flush()?;
 
             let s = stream.try_clone()?;
